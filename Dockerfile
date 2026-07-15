@@ -31,12 +31,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # y no se repiten en cada build al cambiar codigo.
 COPY gateway/requirements.txt gateway/requirements.txt
 COPY backend/requirements.txt backend/requirements.txt
-COPY agentes/Lumen_buscador/lumen_agente_04/requirements.txt agentes/Lumen_buscador/lumen_agente_04/requirements.txt
-COPY agentes/Operis_autocompletado/agente_operis_llm/requirements_servidor.txt agentes/Operis_autocompletado/agente_operis_llm/requirements_servidor.txt
+COPY agentes/Lumen_buscador/requirements.txt agentes/Lumen_buscador/requirements.txt
+COPY agentes/Operis_autocompletado/requirements_servidor.txt agentes/Operis_autocompletado/requirements_servidor.txt
 COPY agentes/Jano_transporte/requirements.txt agentes/Jano_transporte/requirements.txt
 COPY agentes/Vigil_busquedaconcursos/requirements.txt agentes/Vigil_busquedaconcursos/requirements.txt
-COPY agentes/Garum_gestorcorreos/agente_gestor_correos/requirements.txt agentes/Garum_gestorcorreos/agente_gestor_correos/requirements.txt
-COPY agentes/Hermes_telegram/agente_telegram_ponentes/requirements.txt agentes/Hermes_telegram/agente_telegram_ponentes/requirements.txt
+COPY agentes/Garum_gestorcorreos/requirements.txt agentes/Garum_gestorcorreos/requirements.txt
+COPY agentes/Hermes_telegram/requirements.txt agentes/Hermes_telegram/requirements.txt
 
 # Operis: su requirements.txt completo arrastra streamlit (~200 MB, solo
 # para su interfaz de prueba); aqui instalamos su set de servidor.
@@ -46,12 +46,12 @@ COPY agentes/Hermes_telegram/agente_telegram_ponentes/requirements.txt agentes/H
 RUN pip install --no-cache-dir \
     -r gateway/requirements.txt \
     -r backend/requirements.txt \
-    -r agentes/Lumen_buscador/lumen_agente_04/requirements.txt \
-    -r agentes/Operis_autocompletado/agente_operis_llm/requirements_servidor.txt \
+    -r agentes/Lumen_buscador/requirements.txt \
+    -r agentes/Operis_autocompletado/requirements_servidor.txt \
     -r agentes/Jano_transporte/requirements.txt \
     -r agentes/Vigil_busquedaconcursos/requirements.txt \
-    -r agentes/Garum_gestorcorreos/agente_gestor_correos/requirements.txt \
-    -r agentes/Hermes_telegram/agente_telegram_ponentes/requirements.txt \
+    -r agentes/Garum_gestorcorreos/requirements.txt \
+    -r agentes/Hermes_telegram/requirements.txt \
     groq pypdf python-docx pdf2image pytesseract Pillow "psycopg[binary]"
 
 # Ahora el codigo completo (lo que excluye .dockerignore no entra)

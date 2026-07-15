@@ -1,7 +1,7 @@
 """
 integrations/bd_backend.py — acceso de SOLO LECTURA a la BBDD real (Neon Postgres).
 
-Copiado de kit_conexion_agentes_Nora/bd_backend.py (DESAFIO_MITUMI/), el kit oficial
+Copiado de kit_conexion_agentes/bd_backend.py (repositorio de desarrollo), el kit oficial
 del proyecto para que cualquier agente de data lea la BD real -- es el mismo patrón
 que ya usa Lumen en producción (Agente_04_Copilot_Raul/integrations/db_backend.py).
 Adaptado para agente_operis: importa DATABASE_URL desde config/settings.py (en vez
@@ -36,7 +36,7 @@ from config.settings import DATABASE_URL
 # Tablas del dominio de negocio de agente_operis (evento/cliente/ponentes/nota_bene
 # tocan todas ellas; `estados` desaparecio del contrato Prisma y el estado vive en
 # eventos.estado. Mismo conjunto que usa Lumen (TABLAS_PERMITIDAS) y que expone
-# el rol agente_readonly -- ver kit_conexion_agentes_Nora/README.md.
+# el rol agente_readonly -- ver kit_conexion_agentes/README.md.
 _TABLAS_BD = {
     "clientes", "eventos", "presupuestos", "ponentes",
     "ponencias", "salas", "espacios",

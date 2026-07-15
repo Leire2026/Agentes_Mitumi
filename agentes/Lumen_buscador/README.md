@@ -1,0 +1,609 @@
+# Agente 04 — Lumen (Copilot de consulta)
+
+Proyecto: **Ágora — arquitectura de agentes de Mitumi**
+Tipo de componente: **Agente especializado autónomo, ejecutable localmente**
+Adaptado de la plantilla común de documentación de agentes de Gestión Inteligente de Eventos.
+
+---
+
+## 0. Principio arquitectónico
+
+Lumen se desarrolla como subproyecto propio, ejecutable en local para pruebas:
+
+```bash
+cd agentes/Lumen_buscador
+python main.py
+```
+
+Lumen funciona de forma **autónoma**: se ejecuta por sí mismo (chat de consola con `main.py`, o API
+HTTP con `servidor.py` para el frontend React). Además expone una interfaz de integración estable,
+`ejecutar_agente(payload)`, por si otro programa quiere invocarlo en el futuro:
+
+```text
+Usuario interno de Mitumi  (consola  o  frontend React)
+        ↓
+main.py  /  servidor.py
+        ↓
+ejecutar_agente(payload)
+        ↓
+Lumen (Agente 04 · Copilot)
+        ↓
+Respuesta estructurada (solo lectura)
+        ↓
+Usuario interno de Mitumi
+```
+
+Lumen es un agente **de consulta**, no de acción: analiza, interpreta y responde. Nunca guarda, nunca
+ejecuta, nunca decide por otro agente.
+
+---
+
+## 1. Regla crítica no modificable
+
+La estructura interna puede adaptarse, **excepto el punto de integración**:
+
+```text
+Lumen_buscador/src/agente.py
+```
+
+Debe exponer siempre:
+
+```python
+def ejecutar_agente(payload: dict) -> dict:
+    """
+    Punto de entrada común del agente Lumen.
+    Lo usan el main.py local, servidor.py o una futura API.
+    """
+    ...
+```
+
+Y respetar siempre:
+
+```text
+1. Mismo contrato de entrada.
+2. Mismo contrato de salida.
+3. Salida siempre estructurada.
+4. Lumen no invoca directamente a otro agente.
+5. Lumen no escribe directamente en la BBDD final — de hecho, no escribe nunca, bajo ningún modo.
+6. Lumen no ejecuta acciones externas reales.
+```
+
+En una integración final dentro del monorepo de Ágora, esta carpeta se ubicaría en
+`src/agents/lumen_copilot/`; aquí se entrega como carpeta autocontenida `Lumen_buscador/` para poder
+probarla de forma aislada.
+
+---
+
+## 2. Identificación del agente
+
+| Campo | Valor |
+|---|---|
+| **Nombre del agente** | Lumen |
+| **Número / rol en la arquitectura** | Agente 04 — Copilot |
+| **Equipo responsable** | Equipo de Data Science |
+| **Fase del evento que cubre** | Transversal — consulta sobre todas las fases (espacios, presupuesto, ponentes, clientes) |
+| **Propósito en una frase** | Responder en lenguaje natural las preguntas del equipo de Mitumi sobre los datos ya existentes en Ágora, sin modificar nada. |
+| **Tipo de agente** | Especializado, autónomo |
+| **Modo por defecto** | `consulta` (solo lectura — no aplican `propuesta` ni `ejecucion_controlada`, ver §9) |
+| **Estado** | MVP |
+| **Última actualización** | 13/07/2026 |
+
+---
+
+## 3. Qué hace este agente
+
+Lumen es el copiloto conversacional del equipo interno de Mitumi para consultar el estado de la
+plataforma Ágora sin tener que abrir la base de datos o pedírselo a otra persona.
+
+```text
+Un organizador pregunta "¿el ponente del evento X todavía no ha subido su presentación?" y Lumen
+responde, cruzando ponencias.presentacion_link vacío (vía eventos.id_ponencia) con
+ponentes.nombre_ponente, citando de dónde sale el dato si se le pide.
+```
+
+### Capacidades principales
+
+- Responde preguntas en lenguaje natural sobre eventos, clientes, presupuestos, ponentes, salas y
+  espacios, usando el esquema documentado en `data/rag/documentos/esquema_bd.md`.
+- Resuelve tanto consultas puntuales (un evento, un ponente) como métricas agregadas (conteos,
+  totales, comparativas entre eventos).
+- Detecta cuándo falta un filtro imprescindible (qué evento, qué rango de fechas) y pide la aclaración
+  mínima en vez de adivinar.
+- Señala explícitamente cuándo un dato no existe o no está disponible, en vez de aproximarlo.
+
+### Ejemplos de uso
+
+- "¿Cuál es el presupuesto total aprobado para los eventos de este trimestre en Madrid?"
+- "¿Qué sala tiene mayor aforo disponible para un evento de 300 personas en Barcelona?"
+- "Del evento Congreso Energía, ¿el ponente tiene pendiente el billete de vuelta?"
+
+---
+
+## 4. Qué NO hace este agente
+
+Lumen **no debe**:
+
+- escribir directamente en la base de datos final (ni en ningún modo, ni siquiera en `ejecucion_controlada`);
+- enviar emails reales ni mensajes de Telegram/WhatsApp;
+- confirmar reservas de espacios, hoteles, vuelos o proveedores;
+- aprobar ni modificar presupuestos;
+- modificar fechas del evento;
+- ejecutar ninguna acción irreversible o reversible sobre la plataforma;
+- invocar directamente a otros agentes (Gestor de correos, Operis, Hermes, Vigil);
+- sustituir al backend de la plataforma.
+
+Límites propios de Lumen (más estrictos que la base común, por ser agente de solo consulta):
+
+- nunca genera ni sugiere sentencias de escritura (INSERT/UPDATE/DELETE/ALTER), ni siquiera como
+  ejemplo o borrador;
+- nunca consulta la tabla `usuarios` ni expone credenciales de acceso a la plataforma — exclusión
+  dura, ver `data/rag/documentos/esquema_bd.md`;
+- no redacta borradores de comunicación (email, mensaje) — eso es competencia de Hermes (03), no de
+  Lumen; si el usuario lo pide, Lumen lo redirige;
+- no genera exportaciones masivas de datos personales (email, teléfono, documento de identificación)
+  sin que el usuario lo pida explícitamente y de forma acotada a un evento o ponente concreto.
+
+---
+
+## 5. Estructura del agente
+
+Árbol real de `Lumen_buscador/` (verificado sobre el disco, no aspiracional — se omiten los
+`__pycache__/` que genera Python automáticamente al ejecutar):
+
+```text
+Lumen_buscador/
+│
+├── README.md                  ← este archivo
+├── GUIA_EJECUCION.md          ← guía paso a paso para arrancar main.py / servidor.py
+├── main.py                    ← consola: sin args = chat con memoria; --demo = un solo disparo
+│                                  sobre inputs/payload_demo.json (regresion/prueba reproducible)
+├── servidor.py                 ← API HTTP (Flask) para el frontend React: memoria por sesion
+├── requirements.txt             ← openai (Groq) + flask/flask-cors (solo hace falta para servidor.py)
+├── .env                       ← secretos reales (Groq API key) - NO se sube al repo
+│
+├── config/
+│   ├── __init__.py
+│   ├── settings.py            ← carga variables desde .env (o .env.example si .env no existe)
+│   └── permisos.py            ← fuerza ALLOW_DB_WRITE=False de forma no configurable
+│
+├── prompts/
+│   ├── prompt_sistema.md              ← rol, permisos de solo lectura, tono, formato de salida
+│   ├── prompt_clasificar_consulta.md  ← clasifica la pregunta entrante. La clasificacion
+│   │                                     PRINCIPAL sigue siendo determinista por palabras clave
+│   │                                     en src/nucleo.py; este prompt esta CONECTADO como
+│   │                                     respaldo del LLM (ver seccion 12 bis) y solo se llama
+│   │                                     cuando esa clasificacion determinista no reconoce nada.
+│   ├── prompt_generar_respuesta.md    ← redacta la respuesta final cuando se usa el LLM
+│   └── prompt_validar_salida.md       ← referencia de la auditoria anti-fuga (real en src/validaciones.py)
+│
+├── src/
+│   ├── __init__.py
+│   ├── agente.py               ← punto de entrada OBLIGATORIO: ejecutar_agente(payload).
+│   │                               Reexporta la logica real desde nucleo.py (no tocar mas alla de eso).
+│   ├── nucleo.py               ← logica real: clasificacion, coordinacion de la consulta y la
+│   │                               respuesta. Incluye consultas transversales (eventos por estado,
+│   │                               conteos/listados generales) ademas de consultas por id_evento,
+│   │                               y el clasificador LLM de respaldo (ver seccion 12 bis).
+│   ├── memoria.py               ← memoria de conversacion (capa POR ENCIMA de ejecutar_agente, sin
+│   │                               tocar su contrato). La usan main.py (por proceso) y servidor.py
+│   │                               (por sesion de navegador), cada uno con sus propias instancias.
+│   ├── lectura_datos.py        ← acceso de SOLO LECTURA a la BD real (integrations/db_backend.py);
+│   │                               bloquea la tabla `usuarios` a nivel de codigo
+│   ├── consultas.py            ← alias de compatibilidad -> reexporta lectura_datos.py
+│   ├── llm.py                  ← cliente Groq (API compatible OpenAI) - lee API key de config/settings
+│   ├── prompts.py               ← carga los prompts/*.md (extrae el bloque de codigo) para pasarselos al LLM
+│   ├── schemas.py               ← contrato de entrada/salida (validar_entrada, construir_salida_base)
+│   └── validaciones.py          ← auditoria anti-alucinacion y anti-escritura (defensa en profundidad)
+│
+├── integrations/
+│   ├── __init__.py
+│   ├── db_backend.py            ← UNICA via de acceso a datos: cliente Postgres de solo lectura
+│   │                               (DATABASE_URL en .env, sesion abierta en modo readonly)
+│   └── verificar_conexion_bd.py ← script manual: compara el esquema real de la BD contra lo que
+│                                    Lumen espera (data/rag/documentos/esquema_bd.md)
+│
+├── inputs/
+│   └── payload_demo.json       ← payload de ejemplo que usa main.py --demo
+│
+├── data/
+│   └── rag/
+│       └── documentos/
+│           └── esquema_bd.md   ← esquema de tablas/campos, fuente unica de verdad del dominio
+│
+└── outputs/
+    └── respuestas_json/        ← aqui guarda main.py --demo la salida de cada ejecucion
+```
+
+Nota importante sobre `src/agente.py`: el nombre de archivo y la funcion `ejecutar_agente(payload)`
+son el contrato obligatorio del proyecto (seccion 1) y no cambian. La logica en si vive en
+`src/nucleo.py` para mantener el fichero de contrato lo mas simple y estable posible; `agente.py`
+solo hace `from src.nucleo import ejecutar_agente`.
+
+## 6. Archivo `.env`
+
+Ver `.env.example` para la plantilla completa (sin secretos). Variables clave:
+
+```env
+ENVIRONMENT=local
+LLM_PROVIDER=groq                       # motor confirmado
+LLM_MODEL=llama-3.3-70b-versatile       # limite de tokens/dia por modelo: ver src/llm.py y GUIA_EJECUCION.md
+LLM_TEMPERATURE=0.1                     # respuestas deterministas para consulta de datos
+LLM_MAX_TOKENS=800
+GROQ_API_KEY=...                        # solo en .env real, nunca en .env.example ni en el codigo
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+ALLOW_DB_WRITE=False       # no negociable para Lumen
+ALLOW_EXTERNAL_SEND=False
+ALLOW_CREATE_EVENT=False
+ALLOW_AUTO_APPROVAL=False
+DATABASE_URL=postgresql://...           # conexion real (Postgres/Neon) - FUENTE UNICA de datos
+DATABASE_ROLE=readonly
+TABLAS_EXCLUIDAS=usuarios
+FLASK_DEBUG=false                       # servidor.py: debug del reloader de Flask. OFF por defecto (RCE si se expone)
+PORT=5001                               # servidor.py: puerto de la API HTTP
+SESION_TTL_HORAS=6                      # servidor.py: horas de inactividad antes de purgar una sesion sola (ver §14)
+CLASIFICADOR_LLM_RESPALDO=true          # src/nucleo.py: respaldo LLM de clasificacion (ver §12 bis); false = solo deterministico
+```
+
+`.gitignore` debe incluir `.env`, `*.log`, `outputs/`, `data/rag/indice/`. La API key y la cadena
+de conexión a la BD viven solo en `.env` (nunca en `.env.example`, nunca hardcodeadas en el código).
+
+## 7. Contrato de entrada — adaptación para Lumen
+
+- `id_evento` puede ser `null` cuando la consulta es transversal a varios eventos (ej. métricas
+  globales) — el campo se mantiene en el contrato, pero se documenta explícitamente esta excepción.
+- `tipo_peticion` para Lumen usa valores como: `"consultar_datos_evento"`,
+  `"consultar_metricas_globales"`, `"responder_pregunta_libre"`.
+- `modo` para Lumen es siempre efectivamente de solo lectura. El campo se mantiene por compatibilidad
+  con el contrato común, pero Lumen ignora cualquier instrucción de `modo: "ejecucion_controlada"` que
+  implique escritura.
+
+Ver `inputs/payload_demo.json` para el payload real que usa `main.py`.
+
+---
+
+## 8. Contrato de salida — adaptación para Lumen
+
+```json
+{
+  "ok": true,
+  "agente": "lumen_copilot",
+  "tipo_peticion": "consultar_datos_evento",
+  "resumen": "El evento Congreso Energía tiene 1 ponente sin billete de vuelta: Ana Ruiz.",
+  "datos_detectados": { "ponentes_sin_billete_vuelta": ["Ana Ruiz"] },
+  "acciones_propuestas": [],
+  "bloqueos_detectados": [],
+  "borradores_generados": [],
+  "requiere_validacion_humana": false,
+  "nivel_riesgo": "bajo",
+  "errores": [],
+  "trazas": {
+    "fuentes_consultadas": ["ponencias.billete_vuelta_link", "ponentes.nombre_ponente"],
+    "timestamp": "2026-07-08T09:00:00",
+    "modo": "consulta"
+  }
+}
+```
+
+`acciones_propuestas` y `borradores_generados` quedan **siempre vacíos** en Lumen. `src/validaciones.py`
+lo fuerza en código, no solo por prompt.
+
+---
+
+## 9. Esquema de datos de referencia
+
+Ver `data/rag/documentos/esquema_bd.md` para el detalle completo de tablas, campos, relaciones y la
+exclusión dura de la tabla `usuarios`. `src/lectura_datos.py` (y su alias `src/consultas.py`) usan
+esos mismos nombres de tabla y campo al leer de la BD real.
+
+---
+
+## 9 bis. Fuente de datos: BD real (única)
+
+Lumen lee exclusivamente de una base de datos Postgres real (`DATABASE_URL` en `.env`), a través de
+`integrations/db_backend.py`. No hay mock JSON ni API HTTP intermedia — se retiraron deliberadamente
+para que exista una única fuente de verdad, sin ambigüedad sobre de dónde sale cada dato.
+
+- Conexión de solo lectura reforzada en dos capas: la sesión de Postgres se abre con
+  `readonly=True` (Postgres rechaza cualquier escritura a nivel de protocolo, no solo por
+  convención en el código), y `db_backend.py` no implementa ni expone ninguna función de escritura.
+- La tabla `usuarios` sigue bloqueada en `config/permisos.py` (`TABLAS_EXCLUIDAS`), comprobado tanto
+  en `src/lectura_datos.py` como en `integrations/db_backend.py` (defensa en dos capas).
+- Si la conexión falla (red, credenciales, columna que no existe), `ejecutar_agente` devuelve un
+  bloqueo explícito (`nivel_riesgo: "medio"`) en vez de fallar en seco o inventar un dato — ver
+  `integrations/db_backend.py::DbBackendError` y su manejo en `src/nucleo.py`.
+
+**Estado de verificación:** el esquema se verificó en vivo contra la BD real (Neon) con el script
+de abajo: todas las tablas coinciden con `data/rag/documentos/esquema_bd.md`. La única diferencia
+(columna `presupuestos.observaciones`, presente en la BD y antes no documentada) ya está añadida. Si
+en el futuro cambian tablas o columnas, vuelve a ejecutar:
+
+```bash
+cd agentes/Lumen_buscador
+python integrations/verificar_conexion_bd.py
+```
+
+Esto conecta con `DATABASE_URL`, compara tablas y columnas reales contra lo que Lumen espera, y avisa
+de cualquier diferencia (tabla o columna que falte, o que sobre) para corregir `db_backend.py` o el
+esquema si hace falta.
+
+**Seguridad de `DATABASE_URL`:** la cadena de conexión (usuario, contraseña, host) vive solo en
+`.env`, que ya está en `.gitignore` — igual que `GROQ_API_KEY`. No se hardcodea en ningún archivo
+de código ni se sube al repositorio. Si esa contraseña se ha compartido por un canal no seguro
+(chat, email), lo prudente es rotarla desde el panel de Neon en cuanto sea posible.
+
+---
+
+## 10. Flujo interno implementado
+
+```text
+1. main.py lee inputs/payload_demo.json y llama a ejecutar_agente(payload) (src/agente.py).
+2. src/schemas.py valida entrada minima (id_evento puede ser null, tipo_peticion obligatorio).
+3. src/nucleo.py aplica PRIMERO las reglas duras deterministas (nunca delegadas al LLM):
+   - si la pregunta menciona la tabla `usuarios` / credenciales -> bloqueo, riesgo alto.
+   - si pide una escritura (modificar, aprobar, borrar, confirmar...) -> bloqueo, riesgo medio.
+   Estas dos comprobaciones se hacen en codigo, ANTES de que el LLM entre en juego, como defensa
+   en profundidad: el LLM nunca es el unico guardian de estas reglas.
+4. Para preguntas de solo lectura sobre un evento:
+   - los patrones especificos (billete de ida/vuelta de ponentes) se resuelven de forma
+     determinista via src/lectura_datos.py, sin LLM (mas rapido y 100% predecible).
+   - el resto de preguntas libres (presupuesto, sala, espacio, cliente...) se resuelven con el
+     LLM configurado (Groq) si GROQ_API_KEY esta presente en .env: src/nucleo.py arma el contexto
+     completo del evento (src/lectura_datos.py, tabla `usuarios` ya excluida) y llama al LLM con
+     prompts/prompt_sistema.md + prompts/prompt_generar_respuesta.md (ver src/llm.py, src/prompts.py).
+   - la llamada a Groq pide modo JSON (`response_format=json_object`) y la respuesta se limpia de
+     posibles fences de markdown antes de parsear (`src/nucleo._parsear_json_llm`); si aun asi el
+     LLM no esta configurado, falla, o no devuelve JSON valido, se hace fallback automatico al
+     resumen determinista del evento - Lumen nunca se queda sin responder por un fallo del LLM.
+5. Si NO hay id_evento y ninguna regla determinista de arriba reconocio nada (ver seccion 12 bis):
+   clasificador LLM de respaldo. Se le pide al LLM (prompts/prompt_clasificar_consulta.md) UNA
+   etiqueta de una lista cerrada de 6 categorias -nunca SQL, nunca datos- para redirigir la
+   pregunta a una de las ramas deterministas ya existentes. Si el LLM no esta disponible, falla, o
+   devuelve una categoria fuera de esa lista, se ignora sin mas: el comportamiento es identico al
+   de no tener este respaldo conectado.
+6. src/validaciones.py audita SIEMPRE la salida final (venga del LLM o de las reglas): fuerza
+   acciones_propuestas/borradores_generados vacios y bloquea cualquier fuga sobre `usuarios` o
+   credenciales de acceso, incluso si el LLM alucinase o el usuario intentase manipular el prompt.
+7. main.py imprime el resultado y lo guarda en outputs/respuestas_json/salida_demo.json.
+```
+
+El `SELECT` real lo construye codigo determinista en `src/lectura_datos.py` — el LLM nunca genera SQL
+ni decide que tabla consultar; solo redacta la respuesta en lenguaje natural a partir del contexto que
+ya se le entrega, ya filtrado. Esto es intencional: aunque el LLM fallase o fuese manipulado, no puede
+saltarse las restricciones de acceso a datos.
+
+## 11. Prompts
+
+```text
+prompts/
+├── prompt_sistema.md              ← rol, permisos de solo lectura, tono, formato de salida
+├── prompt_clasificar_consulta.md  ← clasifica la pregunta entrante (respaldo LLM, ver sección 12 bis)
+├── prompt_generar_respuesta.md    ← redacta la respuesta grounded en los datos recuperados
+└── prompt_validar_salida.md       ← auditoría final anti-alucinación y anti-escritura
+```
+
+---
+
+## 12. RAG, datos e integraciones
+
+```text
+data/rag/documentos/esquema_bd.md      ← esquema de tablas/campos (fuente única de verdad)
+integrations/db_backend.py             ← única vía de acceso a datos: Postgres real, solo lectura
+integrations/verificar_conexion_bd.py  ← script manual para comparar el esquema real contra esquema_bd.md
+```
+
+Las integraciones de Lumen solo leen. No existe ninguna integración de escritura en este agente.
+
+**Nota sobre "RAG":** el nombre de la carpeta (`data/rag/`) es heredado de la plantilla común del
+proyecto, pero Lumen **no implementa RAG en el sentido técnico** (no hay embeddings, ni índice
+vectorial, ni búsqueda por similitud semántica). `esquema_bd.md` es documentación estática del
+esquema, siempre igual, que se usa como referencia fija — no se recupera dinámicamente por
+parecido con la pregunta. Los datos de negocio (eventos, presupuestos, ponentes...) son
+estructurados y viven en Postgres con relaciones conocidas; para ese caso, una consulta SQL
+determinista (`src/lectura_datos.py` → `integrations/db_backend.py`) es más precisa, más rápida y
+más auditable que una recuperación semántica aproximada. Un RAG vectorial real solo se
+justificaría si Lumen tuviera que responder sobre documentos no estructurados (contratos, actas en
+PDF...), que no es el caso hoy. Ver también
+`Lumen_esquema_y_guia_principiantes.html`, sección 11, para el razonamiento completo.
+
+---
+
+## 12 bis. Clasificador LLM de respaldo
+
+`prompts/prompt_clasificar_consulta.md` está conectado en `src/nucleo.py`
+(`_clasificar_con_llm_respaldo` / `_responder_con_clasificador_respaldo`). No sustituye a la
+clasificación por palabras clave: es un respaldo que solo entra en juego cuando se cumplen **las
+dos** condiciones a la vez:
+
+1. La pregunta no trae `id_evento` (consulta transversal, no sobre un evento concreto).
+2. Ninguna regla determinista de la sección 1 de `ejecutar_agente()` reconoció nada — ni los
+   bloqueos de seguridad (`usuarios`, escritura), ni `billete`/`ponente`, ni los sinónimos de
+   `SINONIMOS_ESTADO_EVENTO` / `PALABRAS_TRANSVERSAL_*`.
+
+Cuando se cumplen las dos, se le pide al LLM **una sola etiqueta** de una lista cerrada de 6
+categorías (`consulta_datos_evento`, `consulta_metricas_globales`, `aclaracion_necesaria`,
+`fuera_de_alcance_escritura`, `fuera_de_alcance_usuarios`, `no_relacionada` — el enum exacto del
+prompt). Esa etiqueta solo decide a qué rama determinista ya existente se redirige la pregunta:
+
+| Categoría devuelta por el LLM | Qué hace Lumen |
+|---|---|
+| `consulta_metricas_globales` | Reutiliza `_responder_consulta_transversal_eventos` (vuelve a leer la BD real; el LLM no aporta ningún dato) |
+| `consulta_datos_evento` / `aclaracion_necesaria` | Pide el nombre o `id_evento` del evento |
+| `fuera_de_alcance_escritura` | Mismo bloqueo que la detección por palabras clave, `nivel_riesgo: "medio"` |
+| `fuera_de_alcance_usuarios` | Mismo bloqueo que la detección por palabras clave, `nivel_riesgo: "alto"` |
+| `no_relacionada` | Cae al mensaje fijo de siempre: *"Esa información no está en Mitumi. Reformula tu consulta."* |
+
+Garantías de seguridad y de robustez:
+
+- **El LLM nunca genera SQL ni aporta datos**, solo una etiqueta de enrutado — la consulta real a
+  la BD la sigue haciendo exclusivamente `src/lectura_datos.py`, igual que en el resto del agente.
+- **Los bloqueos de seguridad siguen ganando siempre.** Este respaldo solo se intenta cuando la
+  pregunta NO trae `id_evento` y ya pasó, sin activarse, por los bloqueos deterministas de
+  `usuarios`/escritura de la sección 1 — esos bloqueos se evalúan primero y en código, nunca
+  dependen de que el LLM "se porte bien". Las categorías `fuera_de_alcance_*` del respaldo son una
+  red de seguridad adicional para preguntas redactadas de una forma que las palabras clave no
+  cubrían, no el primer filtro.
+- **Etiqueta fuera del enum, JSON inválido, o LLM caído/sin API key → se ignora por completo.** El
+  código valida que `categoria` esté en la lista cerrada de 6 valores; si no lo está, o si el LLM
+  falla, el comportamiento es idéntico al de antes de conectar este respaldo (mensaje fijo de la
+  sección 3 de `ejecutar_agente()`). Nunca se adivina ni se inventa una respuesta.
+- **Se puede desactivar sin tocar código:** `CLASIFICADOR_LLM_RESPALDO=false` en `.env` fuerza
+  determinismo total (por ejemplo, para pruebas automatizadas repetibles).
+
+Motivación (pros/contras completos en `02_test_jurado_lumen.docx`, pregunta 33): al acotarlo a
+"solo entra cuando el código no reconoció nada", el coste de tokens, la latencia y la pérdida de
+determinismo que conlleva el LLM solo se pagan en el porcentaje de preguntas que hoy caen en el
+mensaje genérico — no en todas. Sigue sin resolver la otra limitación conocida del MVP
+(persistencia de sesiones entre reinicios, ver sección 16).
+
+---
+
+## 13. Modo seguro por defecto
+
+```python
+ALLOW_DB_WRITE = False          # fijo en config/permisos.py, no configurable para Lumen
+ALLOW_EXTERNAL_SEND = False
+ALLOW_CREATE_EVENT = False
+ALLOW_AUTO_APPROVAL = False
+```
+
+En Lumen estos flags no son un "modo por defecto que se podría cambiar más adelante": son una
+restricción arquitectónica permanente, reforzada en `config/permisos.py` y verificada en
+`src/agente.py`.
+
+---
+
+## 14. Ejecución local
+
+```bash
+cd agentes/Lumen_buscador
+pip install -r requirements.txt
+cp .env.example .env
+python main.py
+```
+
+`main.py` (consola, sin argumentos): abre un **chat interactivo con memoria de conversación**
+(`src/memoria.py`) — recuerda el último evento del que se habló y lo reutiliza en preguntas de
+seguimiento ("¿y su presupuesto?", "ese evento"). El evento se resuelve por UUID o número
+explícito, por nombre ("del evento Congreso Energía") o por memoria. Escribe `nuevo` para
+olvidar el contexto sin cerrar la consola, o `salir` (`exit`/`quit`) para borrar la memoria de
+forma explícita y terminar el programa.
+
+`python main.py --demo`: un solo disparo — carga `inputs/payload_demo.json`, llama a
+`ejecutar_agente(payload)`, imprime la respuesta y la guarda en
+`outputs/respuestas_json/salida_demo.json`. El payload trae `id_evento: null` y una pregunta
+transversal ("¿cuántos eventos hay?"), así que corre contra la BD real sin depender de ningún id
+hardcodeado. `modo_demo` resuelve el evento igual que el chat: si editas la pregunta para nombrar
+un evento o pegar su UUID, lo resuelve por nombre/UUID. Los `id` reales son UUID; el antiguo
+`id_evento: 12` numérico se retiró porque no existía en la BD real y hacía fallar el demo.
+
+`python servidor.py`: API HTTP (Flask, puerto 5001) para el **frontend React**, con memoria de
+conversación por sesión (`sesion_id`) en vez de por proceso. Escribir `salir` (`exit`/`quit`)
+como mensaje normal en `POST /chat` borra esa sesión de `_sesiones` por completo (memoria
+eliminada de RAM); `POST /chat/reset` en cambio solo vacía el contexto sin cerrar la sesión. Ver
+`GUIA_EJECUCION.md` sección 4.3 para el contrato completo de ambos endpoints.
+
+---
+
+## 15. Casos de fallo específicos de Lumen
+
+| Fallo | Comportamiento esperado |
+|---|---|
+| Falta `id_evento` en una consulta que sí lo necesita | `bloqueos_detectados` pidiendo el evento, no se adivina |
+| Se pregunta por la tabla `usuarios` o por credenciales de acceso | Bloqueo inmediato, `nivel_riesgo: "alto"`, `requiere_validacion_humana: true`, no se toca la BD |
+| Se pide una escritura disfrazada de pregunta ("¿puedes subir el presupuesto un 10%?") | Se bloquea la parte de escritura |
+| El dato de un evento concreto no existe (p. ej. `id_evento` que no está en la BD) | Se declara explícitamente que ese evento no existe, no se aproxima |
+| La pregunta no tiene nada que ver con el dominio de Mitumi/Ágora (no hay `id_evento`, no se reconoce ningún tema de la plataforma, y el clasificador LLM de respaldo tampoco reconoce nada o confirma `no_relacionada`) | Respuesta fija y literal: **"Esa información no está en Mitumi. Reformula tu consulta."** (`src/nucleo.py`, rama 3). Aplica también cuando el LLM redacta y el dato pedido no está en `<datos_recuperados>` ni en el esquema (`prompts/prompt_sistema.md`, `prompts/prompt_generar_respuesta.md`) |
+| El clasificador LLM de respaldo devuelve JSON inválido, una categoría fuera del enum de 6, o falla/no está disponible | Se ignora por completo, sin reintentos: la pregunta sigue el mismo camino que si el respaldo no existiera (§12 bis) |
+| El LLM devuelve texto no estructurado (cuando se conecte el LLM real) | Reintento controlado vía `prompt_validar_salida.md`; si persiste, error controlado |
+| Consulta ambigua sin evento ni rango de fechas | Se pide aclaración mínima antes de consultar datos |
+| Integración con la BD falla | Se devuelve error, no se inventa una respuesta con datos "probables" |
+
+---
+
+## 16. Checklist final
+
+- [x] Existe `README.md` (este archivo).
+- [x] Existe `.env.example` sin secretos, y `.env` real con la API key de Groq (no versionado).
+- [x] Existe `main.py` para ejecucion local - funciona out-of-the-box en modo demo.
+- [x] Existe `src/agente.py` con `ejecutar_agente(payload)` (reexporta `src/nucleo.py`).
+- [x] Existe `src/schemas.py` con el contrato de entrada/salida.
+- [x] Existen los 4 prompts, y ahora se usan de verdad (`src/prompts.py` los carga en runtime).
+- [x] Existe `data/rag/documentos/esquema_bd.md` con el esquema real de la BD.
+- [x] Existe `inputs/payload_demo.json`.
+- [x] El agente no invoca a otros agentes.
+- [x] El agente no escribe directamente en la BD final (restriccion de diseno, no solo de `.env`).
+- [x] El agente no envia emails/mensajes reales.
+- [x] Los permisos por defecto estan en modo seguro (y son fijos, no solo por defecto).
+- [x] Se documenta que hace y que no hace (parrafos 3-4).
+- [x] Motor de LLM confirmado y conectado: Groq (`llama-3.3-70b-versatile`), con fallback
+      determinista automatico si el LLM no esta disponible o falla.
+- [x] Consultas transversales (`id_evento: null`) implementadas de forma determinista en
+      `src/nucleo.py`: eventos por estado (con sinónimos y sin adivinar estados que no existen) y
+      conteos/listados generales ("cuántos eventos tenemos"). Resuelto en código, sin depender del
+      LLM ni de que esté disponible.
+- [x] Memoria de conversación (`src/memoria.py`) por encima de `ejecutar_agente(payload)`, sin
+      tocar su contrato: recuerda el último evento mencionado (explícito o "enganchado" desde una
+      consulta transversal con un solo resultado) y pasa el historial reciente al LLM solo para
+      resolver referencias del lenguaje, nunca como fuente de datos. La usan `main.py` (memoria
+      por proceso) y `servidor.py` (memoria por sesión de navegador).
+- [x] API HTTP (`servidor.py`, Flask + CORS) para que el frontend React pueda chatear con Lumen:
+      `POST /chat` y `POST /chat/reset`, con memoria por `sesion_id`, más `GET /health`
+      (sonda uniforme del sistema, la usan el gateway y el smoke test).
+- [x] Conexión a la BD real (Postgres) implementada como fuente única de datos
+      (`integrations/db_backend.py`), sin mock ni API intermedia. `DATABASE_URL` (Neon) ya
+      configurada en `.env`.
+- [x] `contexto_completo_evento` usa UNA sola conexión Postgres para las ~6 lecturas de un evento
+      (antes abría una por tabla).
+- [x] Respuesta del LLM robusta a JSON envuelto en fences de markdown + modo JSON de Groq
+      (`src/nucleo._parsear_json_llm`, `src/llm.py`).
+- [x] Fechas de evento se muestran como fecha (`2026-12-10`), no como timestamp con hora/zona
+      (`integrations/db_backend._serializar_valor`).
+- [x] `id_evento` explícito reconoce UUID (además del número heredado); el demo ya no hardcodea id.
+- [x] `servidor.py` arranca con `debug` OFF por defecto, activable con `FLASK_DEBUG=true` en `.env`.
+- [x] Esquema real verificado en vivo contra Neon con `python integrations/verificar_conexion_bd.py`:
+      todas las tablas coinciden; la única diferencia (columna `presupuestos.observaciones`, que
+      faltaba en el esquema esperado) ya está añadida en `esquema_bd.md` y en el script de
+      verificación. La tabla `usuarios` existe y se confirma bloqueada.
+- [x] Clasificador LLM de respaldo conectado (`prompts/prompt_clasificar_consulta.md` en
+      `src/nucleo.py`): la clasificación principal de preguntas transversales sigue siendo
+      determinista por palabras clave (funciona sin LLM), pero ahora, si no reconoce nada y no hay
+      `id_evento`, el LLM aporta una etiqueta de respaldo de una lista cerrada para rescatar
+      preguntas formuladas fuera de los sinónimos cubiertos en `SINONIMOS_ESTADO_EVENTO`. Ver §12
+      bis. Se puede desactivar con `CLASIFICADOR_LLM_RESPALDO=false` en `.env`.
+- [ ] Pendiente: persistencia de sesiones de `servidor.py` más allá de la memoria del proceso
+      (hoy se pierden si se reinicia el servidor — aceptado para esta fase de demo). Cuando haga
+      falta, se resuelve moviendo `_sesiones` a un backend externo (Redis, con expiración nativa),
+      no a la BD de negocio de Postgres (`ALLOW_DB_WRITE=False` es una restricción permanente).
+- [x] Expiración de sesiones inactivas en `servidor.py` (TTL, `SESION_TTL_HORAS` en `.env`, 6h por
+      defecto): antes una sesión que el usuario abandonaba sin escribir "salir" (p. ej. cerrar la
+      pestaña) se quedaba en `_sesiones` para siempre mientras el proceso viviera — una fuga de
+      memoria lenta con tráfico real. Ahora `_purgar_sesiones_expiradas()` se ejecuta en cada
+      `GET /` y `POST /chat` y borra solas las sesiones inactivas más de `SESION_TTL_HORAS`.
+- [x] Memoria temporal con borrado explícito por palabra clave: `salir`/`exit`/`quit` borra la
+      memoria en RAM en `main.py` (y termina el proceso) y borra la sesión completa de
+      `servidor.py` (distinto de `POST /chat/reset`, que solo vacía el contexto sin cerrar la
+      sesión). Ver §14 y `GUIA_EJECUCION.md` §4.1/§4.3.
+- [x] Confirmado y documentado que Lumen no usa RAG vectorial (embeddings/búsqueda semántica):
+      usa lectura directa a BD estructurada + un documento de esquema estático como referencia.
+      Razonamiento completo en §12 y en `Lumen_esquema_y_guia_principiantes.html` (sección 11).
+- [x] Respuesta fija para preguntas fuera del dominio de datos de Mitumi: "Esa información no está
+      en Mitumi. Reformula tu consulta.", literal y sin variaciones, tanto en la rama
+      determinista (`src/nucleo.py`) como en la instrucción dada al LLM (`prompts/prompt_sistema.md`,
+      `prompts/prompt_generar_respuesta.md`) como en la categoría `no_relacionada` del clasificador
+      LLM de respaldo (§12 bis). Ver §15.
+
+## Nota sobre las pruebas de este entregable
+
+`python main.py` y los casos de bloqueo (tabla `usuarios`, intentos de escritura) se probaron y
+funcionan correctamente de extremo a extremo. La llamada real al LLM de Groq se probo hasta el punto
+de construir la peticion (prompt + contexto JSON) correctamente; la llamada de red en si no se pudo
+verificar desde este entorno de generacion porque su sandbox bloquea el acceso saliente a dominios no
+incluidos en su lista blanca (api.groq.com no lo esta) - esto es una restriccion del entorno donde se
+generaron estos archivos, no del codigo. En vuestro propio equipo, con acceso normal a internet, la
+llamada a Groq deberia funcionar tal cual; si fallase por cualquier motivo, el agente cae de forma
+segura a la respuesta determinista (se ve reflejado en el campo `errores` de la salida).
+
+El esquema real (columnas/tablas) ya se ha confirmado en vivo contra Neon ejecutando
+`python integrations/verificar_conexion_bd.py`: coincide con `data/rag/documentos/esquema_bd.md`
+salvo la columna `presupuestos.observaciones`, que se ha añadido. La lógica de enrutado y manejo de
+errores de `integrations/db_backend.py` se verificó además con una base de datos simulada.

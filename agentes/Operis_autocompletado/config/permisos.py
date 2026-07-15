@@ -16,7 +16,7 @@ ALLOW_AUTO_APPROVAL = False
 # ---------------------------------------------------------------------
 # Tablas de la BD real (Neon Postgres) a las que agente_operis puede
 # leer -- ver integrations/bd_backend.py y src/lectura_bd.py. Desde que
-# se conectó el agente al kit_conexion_agentes_Nora (DESAFIO_MITUMI/),
+# se conectó el agente al kit_conexion_agentes (repositorio de desarrollo),
 # Operis SÍ consulta la BD real, aunque solo en modo lectura (ALLOW_DB_
 # WRITE se queda en False siempre, sin excepción -- ver arriba).
 #

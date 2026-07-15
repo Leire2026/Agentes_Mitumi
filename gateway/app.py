@@ -69,11 +69,15 @@ STUBS_PENDIENTES: dict[str, str] = {}
 # la estructura plana del repo de despliegue (Garum al lado del gateway)
 def _localizar_garum() -> Path:
     raiz = Path(__file__).resolve().parent.parent
-    for candidata in (raiz / "agentes", raiz):
-        ruta = candidata / "Garum_gestorcorreos" / "agente_gestor_correos"
-        if ruta.exists():
+    candidatas = (
+        raiz / "agentes" / "Garum_gestorcorreos",                             # entrega (aplanada)
+        raiz / "agentes" / "Garum_gestorcorreos" / "agente_gestor_correos",   # entrega (antigua)
+        raiz / "Garum_gestorcorreos" / "agente_gestor_correos",               # repo de despliegue
+    )
+    for ruta in candidatas:
+        if (ruta / "main.py").exists():
             return ruta
-    return raiz / "Garum_gestorcorreos" / "agente_gestor_correos"
+    return candidatas[-1]
 
 
 # Garum (gestor de correos) no es un servidor: se ejecuta por CICLOS

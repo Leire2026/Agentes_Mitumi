@@ -63,12 +63,12 @@ lanzar() {
 # --- servicios -------------------------------------------------------
 # (Garum, el gestor de correos, NO se arranca aquí: no es residente.
 #  Se dispara por ciclos con POST :5003/agentes/garum/ciclos o con
-#  "python3 main.py" en Garum_gestorcorreos/agente_gestor_correos/)
+#  "python3 main.py" en agentes/Garum_gestorcorreos/)
 # PORT se pasa por servicio (backend y Lumen leen la misma variable:
 # si viniera global del .env, uno de los dos arrancaría en el puerto del otro)
 lanzar backend_5004  backend                                   "PORT=5004 $PYTHON app.py"
-lanzar lumen_5001    agentes/Lumen_buscador/lumen_agente_04             "PORT=5001 $PYTHON servidor.py"
-lanzar operis_5002   agentes/Operis_autocompletado/agente_operis_llm   "$PYTHON servidor.py"
+lanzar lumen_5001    agentes/Lumen_buscador             "PORT=5001 $PYTHON servidor.py"
+lanzar operis_5002   agentes/Operis_autocompletado   "$PYTHON servidor.py"
 lanzar jano_8001     agentes/Jano_transporte                           "$PYTHON serve_demo_mercurio.py"
 lanzar vigil_8000    agentes/Vigil_busquedaconcursos                   "$PYTHON serve_demo.py"
 lanzar gateway_5003  gateway                                   "$PYTHON app.py"
@@ -77,7 +77,7 @@ if [ "${1:-}" = "--con-hermes" ]; then
     if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
         echo "⚠ --con-hermes pedido pero TELEGRAM_BOT_TOKEN está vacío: no arranco Hermes"
     else
-        lanzar hermes_bot agentes/Hermes_telegram/agente_telegram_ponentes "$PYTHON servicio.py"
+        lanzar hermes_bot agentes/Hermes_telegram "$PYTHON servicio.py"
     fi
 fi
 

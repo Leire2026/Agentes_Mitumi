@@ -24,8 +24,8 @@ export LLM_API_KEY="${LLM_API_KEY:-${GROQ_API_KEY:-}}"
 # OJO: Render define PORT global (el del gateway). Backend y Lumen leen
 # esa misma variable, así que se les pasa la suya inline, como en local.
 (cd "$RAIZ/backend" && PORT=5004 HOST=127.0.0.1 "$PYTHON" app.py) &
-(cd "$RAIZ/agentes/Lumen_buscador/lumen_agente_04" && PORT=5001 "$PYTHON" servidor.py) &
-(cd "$RAIZ/agentes/Operis_autocompletado/agente_operis_llm" && "$PYTHON" servidor.py) &
+(cd "$RAIZ/agentes/Lumen_buscador" && PORT=5001 "$PYTHON" servidor.py) &
+(cd "$RAIZ/agentes/Operis_autocompletado" && "$PYTHON" servidor.py) &
 (cd "$RAIZ/agentes/Jano_transporte" && "$PYTHON" serve_demo_mercurio.py) &
 (cd "$RAIZ/agentes/Vigil_busquedaconcursos" && "$PYTHON" serve_demo.py) &
 
@@ -33,7 +33,7 @@ export LLM_API_KEY="${LLM_API_KEY:-${GROQ_API_KEY:-}}"
 # y hay token. Solo UNA instancia del bot en el mundo a la vez (si ya
 # corre en un portátil, no activarlo también aquí: se pisan el polling).
 if [ "${ARRANCAR_HERMES:-false}" = "true" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-    (cd "$RAIZ/agentes/Hermes_telegram/agente_telegram_ponentes" && "$PYTHON" servicio.py) &
+    (cd "$RAIZ/agentes/Hermes_telegram" && "$PYTHON" servicio.py) &
 fi
 
 # El gateway, en primer plano y en 0.0.0.0:$PORT (Render lo exige).

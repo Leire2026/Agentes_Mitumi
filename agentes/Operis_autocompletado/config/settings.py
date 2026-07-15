@@ -75,7 +75,7 @@ GROQ_MODEL = _env.get("GROQ_MODEL", os.environ.get("GROQ_MODEL", "openai/gpt-oss
 
 # ----- BD real (Neon Postgres), solo lectura -----
 # Cadena del rol agente_readonly -- pídesela a Nora, NUNCA la de neondb_owner.
-# Ver kit_conexion_agentes_Nora/README.md (DESAFIO_MITUMI/) y src/lectura_bd.py.
+# Ver kit_conexion_agentes/README.md (repositorio de desarrollo) y src/lectura_bd.py.
 # Opcional: si no está configurada, el agente sigue funcionando (no autocarga
 # histórico desde BD ni verifica id_evento contra la BD real).
 DATABASE_URL = _env.get("DATABASE_URL", os.environ.get("DATABASE_URL", ""))
