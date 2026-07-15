@@ -1,0 +1,13 @@
+# agente_operis (motor unico: llm/Groq)
+
+groq              # motor de extraccion (Groq). Requiere GROQ_API_KEY.
+streamlit         # interfaz de prueba.
+pypdf>=4.0        # lectura de PDF con capa de texto.
+python-docx>=1.1  # lectura de DOCX.
+pdf2image>=1.17   # convierte paginas de PDF escaneado a imagen para OCR.
+pytesseract>=0.3  # OCR sobre imagenes de PDF escaneado.
+Pillow>=10        # soporte de imagenes para pdf2image/pytesseract.
+
+# Opcional: lectura de BD real si DATABASE_URL esta disponible.
+psycopg[binary]
+# tiktoken        # solo para regenerar docs/estimacion_tokens.py
